@@ -103,7 +103,7 @@ There are **4 stages** outlined below for completing this project, make sure you
 
 1. Install Talos:
 
-   📍 _It might take a while for the cluster to be setup (10+ minutes is normal). During which time you will see a variety of error messages like: "couldn't get current server API group list," "error: no matching resources found", etc. **This is a normal.** If this step gets interrupted, e.g. by pressing <kbd>Ctrl</kbd> + <kbd>C</kbd>, you likely will need to [reset the cluster](#-reset) before trying again_
+   📍 _It might take a while for the cluster to be setup (10+ minutes is normal). During which time you will see a variety of error messages like: "couldn't get current server API group list," "error: no matching resources found", etc. 'Ready' will remain "False" as no CNI is deployed yet. **This is a normal.** If this step gets interrupted, e.g. by pressing <kbd>Ctrl</kbd> + <kbd>C</kbd>, you likely will need to [reset the cluster](#-reset) before trying again_
 
     ```sh
     task bootstrap:talos
@@ -196,7 +196,7 @@ task talos:reset # --force
 task talos:generate-config
 # Apply the config to the node
 task talos:apply-node IP=? MODE=?
-# e.g. task talos:apply-config IP=10.10.10.10 MODE=auto
+# e.g. task talos:apply-node IP=10.10.10.10 MODE=auto
 ```
 
 ### ⬆️ Updating Talos and Kubernetes versions
@@ -207,7 +207,7 @@ task talos:apply-node IP=? MODE=?
 ```sh
 # Upgrade node to a newer Talos version
 task talos:upgrade-node IP=?
-# e.g. task talos:upgrade IP=10.10.10.10
+# e.g. task talos:upgrade-node IP=10.10.10.10
 ```
 
 ```sh
@@ -216,9 +216,71 @@ task talos:upgrade-k8s
 # e.g. task talos:upgrade-k8s
 ```
 
+## 🤖 Renovate
+
+[Renovate](https://www.mend.io/renovate) is a tool that automates dependency management. It is designed to scan your repository around the clock and open PRs for out-of-date dependencies it finds. Common dependencies it can discover are Helm charts, container images, GitHub Actions, Ansible roles... even Flux itself! Merging a PR will cause Flux to apply the update to your cluster.
+
+To enable Renovate, click the 'Configure' button over at their [Github app page](https://github.com/apps/renovate) and select your repository. Renovate creates a "Dependency Dashboard" as an issue in your repository, giving an overview of the status of all updates. The dashboard has interactive checkboxes that let you do things like advance scheduling or reattempt update PRs you closed without merging.
+
+The base Renovate configuration in your repository can be viewed at [.github/renovate.json5](./.github/renovate.json5). By default it is scheduled to be active with PRs every weekend, but you can [change the schedule to anything you want](https://docs.renovatebot.com/presets-schedule), or remove it if you want Renovate to open PRs right away.
+
+## 🐛 Debugging
+
+Below is a general guide on trying to debug an issue with an resource or application. For example, if a workload/resource is not showing up or a pod has started but in a `CrashLoopBackOff` or `Pending` state. Most of these steps do not include a way to fix the problem as the problem could be one of many different things.
+
+1. Verify the Git Repository is up-to-date and in a ready state.
+
+    ```sh
+    flux get sources git -A
+    ```
+
+    Force Flux to sync your repository to your cluster:
+
+    ```sh
+    flux -n flux-system reconcile ks flux-system --with-source
+    ```
+
+2. Verify all the Flux kustomizations are up-to-date and in a ready state.
+
+    ```sh
+    flux get ks -A
+    ```
+
+3. Verify all the Flux helm releases are up-to-date and in a ready state.
+
+    ```sh
+    flux get hr -A
+    ```
+
+4. Do you see the pod of the workload you are debugging?
+
+    ```sh
+    kubectl -n <namespace> get pods -o wide
+    ```
+
+5. Check the logs of the pod if its there.
+
+    ```sh
+    kubectl -n <namespace> logs <pod-name> -f
+    ```
+
+6. If a resource exists try to describe it to see what problems it might have.
+
+    ```sh
+    kubectl -n <namespace> describe <resource> <name>
+    ```
+
+7. Check the namespace events
+
+    ```sh
+    kubectl -n <namespace> get events --sort-by='.metadata.creationTimestamp'
+    ```
+
+Resolving problems that you have could take some tweaking of your YAML manifests in order to get things working, other times it could be a external factor like permissions on a NFS server. If you are unable to figure out your problem see the support sections below.
+
 ## 🧹 Tidy up
 
-After you have successfully bootstrapped Talos, Kubernetes and Flux it might be a good idea to clean up the repository and remove the [templates](./templates) directory and any files related to the templating process. This will also remove most of the cruft brought in from the upstream template repo.
+Once your cluster is fully configured and you no longer need to run `task configure`, it's a good idea to clean up the repository by removing the [templates](./templates) directory and any files related to the templating process. This will help eliminate unnecessary clutter from the upstream template repository and resolve any "duplicate registry" warnings from Renovate.
 
 1. Tidy up your repository:
 
@@ -233,58 +295,6 @@ After you have successfully bootstrapped Talos, Kubernetes and Flux it might be 
     git commit -m "chore: tidy up :broom:"
     git push
     ```
-
-## 🤖 Renovate
-
-[Renovate](https://www.mend.io/renovate) is a tool that automates dependency management. It is designed to scan your repository around the clock and open PRs for out-of-date dependencies it finds. Common dependencies it can discover are Helm charts, container images, GitHub Actions, Ansible roles... even Flux itself! Merging a PR will cause Flux to apply the update to your cluster.
-
-To enable Renovate, click the 'Configure' button over at their [Github app page](https://github.com/apps/renovate) and select your repository. Renovate creates a "Dependency Dashboard" as an issue in your repository, giving an overview of the status of all updates. The dashboard has interactive checkboxes that let you do things like advance scheduling or reattempt update PRs you closed without merging.
-
-The base Renovate configuration in your repository can be viewed at [.github/renovate.json5](./.github/renovate.json5). By default it is scheduled to be active with PRs every weekend, but you can [change the schedule to anything you want](https://docs.renovatebot.com/presets-schedule), or remove it if you want Renovate to open PRs right away.
-
-## 🐛 Debugging
-
-Below is a general guide on trying to debug an issue with an resource or application. For example, if a workload/resource is not showing up or a pod has started but in a `CrashLoopBackOff` or `Pending` state.
-
-1. Start by checking all Flux Kustomizations & Git Repository & OCI Repository and verify they are healthy.
-
-    ```sh
-    flux get sources oci -A
-    flux get sources git -A
-    flux get ks -A
-    ```
-
-2. Then check all the Flux Helm Releases and verify they are healthy.
-
-    ```sh
-    flux get hr -A
-    ```
-
-3. Then check the if the pod is present.
-
-    ```sh
-    kubectl -n <namespace> get pods -o wide
-    ```
-
-4. Then check the logs of the pod if its there.
-
-    ```sh
-    kubectl -n <namespace> logs <pod-name> -f
-    ```
-
-5. If a resource exists try to describe it to see what problems it might have.
-
-    ```sh
-    kubectl -n <namespace> describe <resource> <name>
-    ```
-
-6. Check the namespace events
-
-    ```sh
-    kubectl -n <namespace> get events --sort-by='.metadata.creationTimestamp'
-    ```
-
-Resolving problems that you have could take some tweaking of your YAML manifests in order to get things working, other times it could be a external factor like permissions on NFS. If you are unable to figure out your problem see the help section below.
 
 ## 👉 Community Support
 

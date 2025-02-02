@@ -21,9 +21,6 @@ spec:
     cleanupOnFail: true
     remediation:
       retries: 3
-  dependsOn:
-    - name: external-ingress-nginx
-      namespace: network
   values:
     controllers:
       cloudflared:
@@ -34,7 +31,7 @@ spec:
           app:
             image:
               repository: docker.io/cloudflare/cloudflared
-              tag: 2025.1.0
+              tag: 2025.1.1
             env:
               NO_AUTOUPDATE: true
               TUNNEL_CRED_FILE: /etc/cloudflared/creds/credentials.json
